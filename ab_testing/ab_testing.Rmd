@@ -1,17 +1,15 @@
 ---
-title: "ab_testing"
+title: "A/B Testing"
 author: "snelson"
 date: "August 6, 2015"
 output: html_document
 ---
-
-# A/B Testing
-
 This RST will attempt to cover a lot of ground in a short amount of time.  Here are the topics:
 
 * A/B testing (design of experiments)
 * Multiple hypothesis testing (controlling for data-snooping bias)
 * Multi-armed bandits (adaptive testing)
+----------------
 
 ## 1) AB Testing
 
@@ -19,7 +17,8 @@ This RST will attempt to cover a lot of ground in a short amount of time.  Here 
 - We have formed a hypothesis and we want to test whether it's true using a controlled experiment
 
 ###Solution strategy
-- We run a randomized controlled experiment, which consists of applying a control to the control group, and a treatment to the treatment group, where subjects are randomly assigned to either the treatment or control group, and the group sizes are large enough to ensure statistical significance. We compare the outcomes from both groups to evaluate the impact (lift) of the treatment.
+- We run a randomized controlled experiment, which consists of applying a control to the control group, and a treatment to the treatment group, where subjects are randomly assigned to either the treatment or control group, and the group sizes are large enough to ensure statistical significance. 
+- We compare the outcomes from both groups to evaluate the impact (lift) of the treatment.
 
 ###Method
 1. Design experiment:
@@ -44,6 +43,20 @@ Curate an audience by retrieving a list of Twitter user_ids:
 ```
 
 Sample size calculations:
+The following assumes we want to compare **proportions** between **2** groups with independent samples from each.
+
+The probability model assumes that **each observation** is drawn from a binomial distribution.  
+
+For each group $j$ we have $x_j$ successes in $n_j$ trials.   
+
+A sum of 2 binomial random variables is also binomial, i.e. $X~B(n, p)+Y~B(m,p)=B(m+n, p).  
+
+Hence we can collapse observations into a sum for each group. 
+
+To be specific, we want to test the means of both groups and see if they are different, i.e.  $H_0:p_1=p_2$ versus $H_A:p_1\neq p_2$.  
+
+The sampling distribution for the MEAN PARAMETER $p$  has mean $p$ and variance $\sigma=\sqrt{p*(1-p)/n)}$. We can use this to build the test of equal $p$ across the two groups.
+
 ```{r}
 #sample size calc
 #power.prop.test
@@ -107,27 +120,24 @@ data<-data.frame(t, imp_img, eng_img, imp_no_img, eng_no_img)
 prop.test( c(sum(data$eng_img), sum(data$eng_no_img)), 
            c(sum(data$imp_img), sum(data$imp_no_img)))
 
-#adjusting for the impression bias 
-#phats
-overall_eng_rate_img<-sum(data$eng_img)/sum(data$imp_img)
-overall_eng_rate_no_img<-sum(data$eng_no_img)/sum(data$imp_no_img)
-#se_phats
-se_phat_img<-((overall_eng_rate_img*(1-overall_eng_rate_img))/sum(data$imp_img))^0.5
-se_phat_no_img<-((overall_eng_rate_no_img*(1-overall_eng_rate_no_img))/sum(data$imp_no_img))^0.5
-#adj phats
-adj_phat_img<-overall_eng_rate_img/se_phat_img
-adj_phat_no_img<-overall_eng_rate_no_img/se_phat_no_img
+#simulate 1000000 campaigns from the observed parameters
+p_img<-sum(data$eng_img)/sum(data$imp_img)
+p_no_img<-sum(data$eng_no_img)/sum(data$imp_no_img)
+n_img<-sum(data$imp_img)
+n_no_img<-sum(data$imp_no_img)
+n_campaigns<-1000000
+a<-rbinom(n_campaigns, n_img, p_img)/n_img
+b<-rbinom(n_campaigns, n_no_img, p_no_img)/n_no_img
+c<-a-b
+hist(c)
+summary(c>0)
+## under the observed parameters, Ad A does better than Ad B only 25% of the time.
 ```
-
-Risk adjusted p_hat_img: `r adj_phat_img` 
-Risk adjusted p_hat_img: `r adj_phat_no_img` 
-
-Ratio of performance metrics. Image improves baseline by 20%:
-Ratio: `r adj_phat_img/adj_phat_no_img`
 
 ### Analysis of Variance
 - What if there is variation in the day-of-week?
 - This implies a need for [blocking](https://en.wikipedia.org/wiki/Randomized_block_design)
+- If 1 day of the week generates all the impressions / engagements, this may be misleading
 - Not sure what the "correct" strategy is (since we have impressions which depends on ad quality), but one possibility is to calculate per-day adjusted phats and run  ANOVA on this variable, with blocking factor=time period, and treatment=ad:
 
 ```{r}
